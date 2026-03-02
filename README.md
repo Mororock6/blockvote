@@ -47,6 +47,7 @@ Smart contracts / backend
 Privacy / ZK voting core
 	•	MACI stack: maci-contracts, maci-cli, maci-circuits, maci-crypto, maci-domainobjs, maci-core  ￼
 	•	Includes MACI tasks for merge/prove and a script to download zkeys.
+
 ---
 
 ## 🧑‍💻 Team Members  
