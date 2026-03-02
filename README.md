@@ -31,19 +31,22 @@ Developed as part of the **AASTMT College of Computing and Information Technolog
 
 ## 🧪 Technology Stack  
 
-> ⚠️ Implementation in progress — this section will be updated as modules are developed.  
+Frontend (dApp)
+	•	Next.js 14 + React 18 + TypeScript  ￼
+	•	Web3 UI/wallet: RainbowKit + wagmi + viem  ￼
+	•	Styling: Tailwind CSS + daisyUI  ￼
+	•	State/utils: Zustand, Axios, etc.  ￼
+	•	ZK-related libs on frontend: snarkjs, circomlib, circomkit, @zk-kit/circuits  ￼
 
-| Layer | Technologies |
-|-------|--------------|
-| **Frontend (Web)** | React, TailwindCSS |
-| **Frontend (Mobile)** | Flutter |
-| **Backend** | Node.js / Flask |
-| **Blockchain** | Ethereum / Polygon (Solidity Smart Contracts) |
-| **Database** | MongoDB / IPFS |
-| **AI Layer** | Python, TensorFlow, Scikit-learn |
-| **Security** | AES, RSA, SHA-256, JWT |
-| **Tools** | MetaMask, Ganache, Hardhat, Postman |
+Smart contracts / backend
+	•	Hardhat (TypeScript-based setup) + Solidity 0.8.20  ￼
+	•	Deploy tooling: hardhat-deploy, hardhat-verify, typechain  ￼
+	•	Ethereum libs: ethers v6 (dev), @ethersproject/* (some deps)  ￼
+	•	Networks/infra: Alchemy RPC endpoints configured (mainnet, sepolia, L2s, etc.)  ￼
 
+Privacy / ZK voting core
+	•	MACI stack: maci-contracts, maci-cli, maci-circuits, maci-crypto, maci-domainobjs, maci-core  ￼
+	•	Includes MACI tasks for merge/prove and a script to download zkeys.
 ---
 
 ## 🧑‍💻 Team Members  
