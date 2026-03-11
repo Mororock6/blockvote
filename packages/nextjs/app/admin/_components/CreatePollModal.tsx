@@ -18,9 +18,13 @@ export default function Example({
   setOpen: (value: boolean) => void;
   refetchPolls: () => void;
 }) {
+  const now = new Date();
+  const defaultExpiry = new Date(now.getTime() + 60 * 60 * 1000);
+
   const [pollData, setPollData] = useState({
     title: "Dummy Title",
-    expiry: new Date(),
+    startDate: now,
+    expiry: defaultExpiry,
     pollType: PollType.NOT_SELECTED,
     mode: EMode.QV,
     options: [""],
@@ -63,7 +67,8 @@ export default function Example({
     setPollData({ ...pollData, options: newOptions });
   }
 
-  const duration = Math.round((pollData.expiry.getTime() - new Date().getTime()) / 1000);
+  const startTimestamp = Math.round(pollData.startDate.getTime() / 1000);
+  const duration = Math.round((pollData.expiry.getTime() - pollData.startDate.getTime()) / 1000);
 
   const { writeAsync } = useScaffoldContractWrite({
     contractName: "MACIWrapper",
@@ -72,23 +77,34 @@ export default function Example({
       pollData.title,
       pollData.options || [],
       JSON.stringify({ pollType: pollData.pollType }),
-      duration > 0 ? BigInt(duration) : 0n,
+      BigInt(startTimestamp),
+      BigInt(duration),
       pollData.mode,
-    ],
+    ] as any,
   });
 
   async function onSubmit() {
     // validate the inputs
     for (const option of pollData.options) {
       if (!option) {
-        // TODO: throw error that the option cannot be blank
         notification.error("Option cannot be blank", { showCloseButton: false });
         return;
       }
     }
 
+    // START DATE validation
+    if (pollData.startDate.getTime() < Date.now() - 5000) {
+      notification.error("Start date must be now or in the future", { showCloseButton: false });
+      return;
+    }
+
+    // EXPIRY validation
+    if (pollData.expiry.getTime() <= pollData.startDate.getTime()) {
+      notification.error("Expiry date must be after the start date", { showCloseButton: false });
+      return;
+    }
+
     if (duration < 60) {
-      // TODO: throw error that the expiry cannot be before atleast 1 min of creation
       notification.error("Expiry cannot be before atleast 1 min of creation", { showCloseButton: false });
       return;
     }
@@ -97,8 +113,6 @@ export default function Example({
       notification.error("Please select a poll type", { showCloseButton: false });
       return;
     }
-
-    // save the poll data to ipfs or find another way for saving the poll type on the smart contract.
 
     try {
       await writeAsync();
@@ -154,7 +168,16 @@ export default function Example({
       </div>
 
       {/* Datetime selector here */}
-      <div className="mb-2 text-neutral-content">Select the expiry date</div>
+      {/* Datetime selectors here */}
+      <div className="mb-2 text-neutral-content">Select the start date</div>
+      <input
+        type="datetime-local"
+        className="border bg-secondary text-neutral rounded-xl px-4 py-2 w-full focus:outline-none"
+        value={pollData.startDate.toLocaleString("sv").replace(" ", "T").slice(0, -3)}
+        onChange={e => setPollData({ ...pollData, startDate: new Date(e.target.value) })}
+      />
+
+      <div className="mt-3 mb-2 text-neutral-content">Select the expiry date</div>
       <input
         type="datetime-local"
         className="border bg-secondary text-neutral rounded-xl px-4 py-2 w-full focus:outline-none"

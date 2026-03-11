@@ -3,11 +3,21 @@ pragma solidity ^0.8.20;
 
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { MACI } from "maci-contracts/contracts/MACI.sol";
-import { IPollFactory } from "maci-contracts/contracts/interfaces/IPollFactory.sol";
-import { IMessageProcessorFactory } from "maci-contracts/contracts/interfaces/IMPFactory.sol";
-import { ITallyFactory } from "maci-contracts/contracts/interfaces/ITallyFactory.sol";
-import { SignUpGatekeeper } from "maci-contracts/contracts/gatekeepers/SignUpGatekeeper.sol";
-import { InitialVoiceCreditProxy } from "maci-contracts/contracts/initialVoiceCreditProxy/InitialVoiceCreditProxy.sol";
+import {
+	IPollFactory
+} from "maci-contracts/contracts/interfaces/IPollFactory.sol";
+import {
+	IMessageProcessorFactory
+} from "maci-contracts/contracts/interfaces/IMPFactory.sol";
+import {
+	ITallyFactory
+} from "maci-contracts/contracts/interfaces/ITallyFactory.sol";
+import {
+	SignUpGatekeeper
+} from "maci-contracts/contracts/gatekeepers/SignUpGatekeeper.sol";
+import {
+	InitialVoiceCreditProxy
+} from "maci-contracts/contracts/initialVoiceCreditProxy/InitialVoiceCreditProxy.sol";
 
 /// @title MACI - Minimum Anti-Collusion Infrastructure Version 1
 /// @notice A contract which allows users to sign up, and deploy new polls
@@ -119,6 +129,7 @@ contract MACIWrapper is MACI, Ownable(msg.sender) {
 		string calldata _name,
 		string[] calldata _options,
 		string calldata _metadata,
+		uint256 _startTime,
 		uint256 _duration,
 		Mode isQv
 	) public onlyOwner {
@@ -142,7 +153,13 @@ contract MACIWrapper is MACI, Ownable(msg.sender) {
 		// encode options to bytes for retrieval
 		bytes memory encodedOptions = abi.encode(_options);
 
-		uint256 endTime = block.timestamp + _duration;
+		require(
+			_startTime >= block.timestamp,
+			"Start time must be now or in future"
+		);
+		require(_duration > 0, "Duration must be greater than 0");
+
+		uint256 endTime = _startTime + _duration;
 
 		// create poll
 		_polls[pollId] = PollData({
@@ -151,7 +168,7 @@ contract MACIWrapper is MACI, Ownable(msg.sender) {
 			encodedOptions: encodedOptions,
 			numOfOptions: _options.length,
 			metadata: _metadata,
-			startTime: block.timestamp,
+			startTime: _startTime,
 			endTime: endTime,
 			pollContracts: pollContracts,
 			options: _options,
@@ -165,7 +182,7 @@ contract MACIWrapper is MACI, Ownable(msg.sender) {
 			_name,
 			_options,
 			_metadata,
-			block.timestamp,
+			_startTime,
 			endTime
 		);
 	}
