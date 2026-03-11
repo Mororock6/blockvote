@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { genRandomSalt } from "maci-crypto";
 import { Keypair, PCommand, PubKey } from "maci-domainobjs";
 import { useContractRead, useContractWrite } from "wagmi";
@@ -20,6 +20,7 @@ export default function PollDetail({ id }: { id: bigint }) {
   const { keypair, stateIndex } = useAuthContext();
 
   const [votes, setVotes] = useState<{ index: number; votes: number }[]>([]);
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
   const [isVotesInvalid, setIsVotesInvalid] = useState<Record<number, boolean>>({});
 
@@ -208,20 +209,28 @@ export default function PollDetail({ id }: { id: bigint }) {
     return { message, encKeyPair };
   }
 
-  function voteUpdated(index: number, checked: boolean, voteCounts: number) {
-    if (pollType === PollType.SINGLE_VOTE) {
-      if (checked) {
-        setVotes([{ index, votes: voteCounts }]);
-      }
-      return;
-    }
+  const voteUpdated = useCallback(
+    (index: number, checked: boolean, voteCounts: number) => {
+      if (pollType === PollType.SINGLE_VOTE) {
+        if (checked) {
+          setSelectedIndex(index);
+          setVotes([{ index, votes: voteCounts }]);
+        } else {
+          setSelectedIndex(null);
+          setVotes([]);
+        }
 
-    if (checked) {
-      setVotes([...votes.filter(v => v.index !== index), { index, votes: voteCounts }]);
-    } else {
-      setVotes(votes.filter(v => v.index !== index));
-    }
-  }
+        return;
+      }
+
+      if (checked) {
+        setVotes(prev => [...prev.filter(v => v.index !== index), { index, votes: voteCounts }]);
+      } else {
+        setVotes(prev => prev.filter(v => v.index !== index));
+      }
+    },
+    [pollType],
+  );
 
   if (isLoading) return <div>Loading...</div>;
 
@@ -265,12 +274,13 @@ export default function PollDetail({ id }: { id: bigint }) {
                   pollOpen={status === PollStatus.OPEN}
                   index={index}
                   candidate={candidate}
-                  clicked={false}
+                  isChecked={selectedIndex === index}
                   currentVotes={votes.find(v => v.index === index)?.votes}
                   pollType={pollType}
                   onChange={(checked, votes) => voteUpdated(index, checked, votes)}
                   isInvalid={Boolean(isVotesInvalid[index])}
                   setIsInvalid={status => setIsVotesInvalid({ ...isVotesInvalid, [index]: status })}
+                  isVoting={voting}
                 />
               </div>
             ))}

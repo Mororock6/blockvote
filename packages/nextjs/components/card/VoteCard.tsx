@@ -1,10 +1,11 @@
-import { useRef, useState } from "react";
+import { memo, useRef, useState } from "react";
 import { PollType } from "~~/types/poll";
 
 type VoteCardProps = {
   index: number;
   candidate: string;
-  clicked: boolean;
+  isChecked: boolean;
+  isVoting: boolean;
   pollType: PollType;
   onChange: (checked: boolean, votes: number) => void;
   setIsInvalid: (value: boolean) => void;
@@ -22,6 +23,8 @@ const VoteCard = ({
   setIsInvalid,
   pollOpen,
   currentVotes,
+  isChecked,
+  isVoting,
 }: VoteCardProps) => {
   const [selected, setSelected] = useState(currentVotes && currentVotes > 0 ? true : false);
   const [votes, setVotes] = useState(currentVotes || 0);
@@ -35,7 +38,8 @@ const VoteCard = ({
             type={pollType === PollType.SINGLE_VOTE ? "radio" : "checkbox"}
             className="mr-2"
             value={index}
-            checked={selected}
+            checked={isChecked}
+            disabled={!pollOpen || isVoting}
             onChange={e => {
               console.log(e.target.checked);
               setSelected(e.target.checked);
@@ -102,4 +106,14 @@ const VoteCard = ({
   );
 };
 
-export default VoteCard;
+export default memo(VoteCard, (prev, next) => {
+  return (
+    prev.index === next.index &&
+    prev.candidate === next.candidate &&
+    prev.isChecked === next.isChecked &&
+    prev.pollOpen === next.pollOpen &&
+    prev.pollType === next.pollType &&
+    prev.isVoting === next.isVoting &&
+    prev.onChange === next.onChange
+  );
+});
