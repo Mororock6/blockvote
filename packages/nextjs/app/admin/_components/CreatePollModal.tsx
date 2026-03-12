@@ -224,14 +224,7 @@ export default function Example({
             value={option}
             onChange={e => handleOptionChange(index, e.target.value)}
           />
-          {index === pollData.options.length - 1 ? (
-            <button
-              className="btn btn-outline ml-4 text-primary hover:bg-primary hover:text-primary-content bg-primary-content"
-              onClick={handleAddOption}
-            >
-              <LuCross size={20} />
-            </button>
-          ) : (
+          {pollData.options.length > 1 && (
             <button
               className="btn btn-outline ml-4 text-primary hover:bg-primary hover:text-primary-content bg-primary-content"
               onClick={() => removeOptions(index)}
@@ -241,6 +234,14 @@ export default function Example({
           )}
         </div>
       ))}
+
+      <button
+        className="btn btn-outline mt-2 text-primary hover:bg-primary hover:text-primary-content bg-primary-content"
+        onClick={handleAddOption}
+      >
+        <LuCross size={20} />
+        <span>Add Candidate</span>
+      </button>
 
       <div className="mt-5 sm:mt-6 sm:grid sm:grid-flow-row-dense sm:grid-cols-2 sm:gap-3">
         <button
