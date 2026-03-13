@@ -20,7 +20,7 @@ export default function PollDetail({ id }: { id: bigint }) {
   const { keypair, stateIndex } = useAuthContext();
 
   const [votes, setVotes] = useState<{ index: number; votes: number }[]>([]);
-  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const [selectedIndexes, setSelectedIndexes] = useState<number[]>([]);
 
   const [isVotesInvalid, setIsVotesInvalid] = useState<Record<number, boolean>>({});
 
@@ -212,18 +212,24 @@ export default function PollDetail({ id }: { id: bigint }) {
   const voteUpdated = useCallback(
     (index: number, checked: boolean, voteCounts: number) => {
       if (pollType === PollType.SINGLE_VOTE) {
-        if (checked) {
-          setSelectedIndex(index);
-          setVotes([{ index, votes: voteCounts }]);
-        } else {
-          setSelectedIndex(null);
-          setVotes([]);
-        }
+        setSelectedIndexes(checked ? [index] : []);
+        setVotes(checked ? [{ index, votes: voteCounts }] : []);
 
         return;
       }
 
+      setSelectedIndexes(prev =>
+        checked
+          ? [...prev.filter(selectedIndex => selectedIndex !== index), index]
+          : prev.filter(selectedIndex => selectedIndex !== index),
+      );
+
       if (checked) {
+        if (pollType === PollType.WEIGHTED_MULTIPLE_VOTE && voteCounts <= 0) {
+          setVotes(prev => prev.filter(v => v.index !== index));
+          return;
+        }
+
         setVotes(prev => [...prev.filter(v => v.index !== index), { index, votes: voteCounts }]);
       } else {
         setVotes(prev => prev.filter(v => v.index !== index));
@@ -274,7 +280,7 @@ export default function PollDetail({ id }: { id: bigint }) {
                   pollOpen={status === PollStatus.OPEN}
                   index={index}
                   candidate={candidate}
-                  isChecked={selectedIndex === index}
+                  isChecked={selectedIndexes.includes(index)}
                   currentVotes={votes.find(v => v.index === index)?.votes}
                   pollType={pollType}
                   onChange={(checked, votes) => voteUpdated(index, checked, votes)}
