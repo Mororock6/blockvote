@@ -26,7 +26,6 @@ const VoteCard = ({
   isChecked,
   isVoting,
 }: VoteCardProps) => {
-  const [selected, setSelected] = useState(currentVotes && currentVotes > 0 ? true : false);
   const [votes, setVotes] = useState(currentVotes || 0);
   const votesFieldRef = useRef<HTMLInputElement>(null);
 
@@ -41,8 +40,6 @@ const VoteCard = ({
             checked={isChecked}
             disabled={!pollOpen || isVoting}
             onChange={e => {
-              console.log(e.target.checked);
-              setSelected(e.target.checked);
               if (e.target.checked) {
                 switch (pollType) {
                   case PollType.SINGLE_VOTE:
@@ -52,8 +49,9 @@ const VoteCard = ({
                     onChange(true, 1);
                     break;
                   case PollType.WEIGHTED_MULTIPLE_VOTE:
+                    onChange(true, votes);
                     if (votes) {
-                      onChange(true, votes);
+                      setIsInvalid(false);
                     } else {
                       setIsInvalid(true);
                     }
@@ -83,7 +81,7 @@ const VoteCard = ({
             "border border-slate-600 bg-primary text-primary-content placeholder:text-accent-content placeholder:font-light rounded-lg px-2 py-2 ml-2 w-20" +
             (isInvalid ? " border-red-500" : "")
           }
-          disabled={!selected}
+          disabled={!isChecked}
           placeholder="Votes"
           min={0}
           step={1}
@@ -91,13 +89,15 @@ const VoteCard = ({
           onChange={function (e) {
             if (
               Number(e.currentTarget.value) < 0 ||
-              (selected && (e.currentTarget.value === "" || Number(e.currentTarget.value) == 0))
+              (isChecked && (e.currentTarget.value === "" || Number(e.currentTarget.value) == 0))
             ) {
               setIsInvalid(true);
+              setVotes(0);
+              onChange(isChecked, 0);
             } else {
               setIsInvalid(false);
               setVotes(Number(e.currentTarget.value));
-              onChange(selected, Number(e.currentTarget.value));
+              onChange(isChecked, Number(e.currentTarget.value));
             }
           }}
         />
@@ -111,6 +111,7 @@ export default memo(VoteCard, (prev, next) => {
     prev.index === next.index &&
     prev.candidate === next.candidate &&
     prev.isChecked === next.isChecked &&
+    prev.isInvalid === next.isInvalid &&
     prev.pollOpen === next.pollOpen &&
     prev.pollType === next.pollType &&
     prev.isVoting === next.isVoting &&
