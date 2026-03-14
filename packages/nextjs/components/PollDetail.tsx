@@ -16,6 +16,7 @@ import { notification } from "~~/utils/scaffold-eth";
 export default function PollDetail({ id }: { id: bigint }) {
   const { data: poll, error, isLoading } = useFetchPoll(id);
   const [pollType, setPollType] = useState(PollType.NOT_SELECTED);
+  const MAX_VOTE_CREDITS = 100;
 
   const { keypair, stateIndex } = useAuthContext();
 
@@ -29,6 +30,53 @@ export default function PollDetail({ id }: { id: bigint }) {
   const [status, setStatus] = useState<PollStatus>();
   const [voted, setVoted] = useState<boolean>(false);
   const [voting, setVoting] = useState<boolean>(false);
+
+  const getVoteStorageKey = (pollId: bigint, voterIndex: bigint) =>
+    `poll-vote:${pollId.toString()}:${voterIndex.toString()}`;
+
+  const validateVotes = (voteList: { index: number; votes: number }[]) => {
+    let totalVotes = 0;
+
+    for (const vote of voteList) {
+      if (!Number.isInteger(vote.votes) || !Number.isFinite(vote.votes)) {
+        return { valid: false, reason: "Please enter integer vote values only." };
+      }
+
+      if (vote.votes < 0 || vote.votes > MAX_VOTE_CREDITS) {
+        return { valid: false, reason: "Each candidate allocation must be between 0 and 100." };
+      }
+
+      totalVotes += vote.votes;
+      if (totalVotes > MAX_VOTE_CREDITS) {
+        return { valid: false, reason: "Total allocated votes must be 100 or less." };
+      }
+    }
+
+    return { valid: true, reason: "" };
+  };
+
+  useEffect(() => {
+    if (!poll || stateIndex == null) {
+      return;
+    }
+
+    const storageKey = getVoteStorageKey(poll.id, stateIndex);
+    const stored = window.localStorage.getItem(storageKey);
+    if (!stored) {
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(stored) as { votes: { index: number; votes: number }[] };
+      if (Array.isArray(parsed?.votes) && parsed.votes.length > 0) {
+        setVotes(parsed.votes);
+        setSelectedIndexes(parsed.votes.map(v => v.index));
+        setVoted(true);
+      }
+    } catch {
+      // ignore malformed storage
+    }
+  }, [poll, stateIndex]);
 
   useEffect(() => {
     if (!poll || !poll.metadata) {
@@ -127,6 +175,12 @@ export default function PollDetail({ id }: { id: bigint }) {
       return;
     }
 
+    const validation = validateVotes(votes);
+    if (!validation.valid) {
+      notification.error(validation.reason);
+      return;
+    }
+
     // check if the poll is closed
     if (status !== PollStatus.OPEN) {
       notification.error("Voting is closed for this poll");
@@ -172,6 +226,10 @@ export default function PollDetail({ id }: { id: bigint }) {
       }
 
       notification.success("Vote casted successfully");
+      if (poll && stateIndex != null) {
+        const storageKey = getVoteStorageKey(poll.id, stateIndex);
+        window.localStorage.setItem(storageKey, JSON.stringify({ votes }));
+      }
       setVoted(true);
     } catch (err) {
       console.log("err", err);
@@ -250,6 +308,9 @@ export default function PollDetail({ id }: { id: bigint }) {
             Vote for {poll?.name}
             {status === PollStatus.CLOSED && " (Closed)"}
           </div>
+          {!voted && pollType === PollType.WEIGHTED_MULTIPLE_VOTE && (
+            <div className="ml-3 text-sm font-semibold text-neutral-content">Credits: {MAX_VOTE_CREDITS}</div>
+          )}
         </div>
         {voted ? (
           <div>
