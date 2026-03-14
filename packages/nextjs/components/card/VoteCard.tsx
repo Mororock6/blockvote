@@ -84,21 +84,27 @@ const VoteCard = ({
           disabled={!isChecked}
           placeholder="Votes"
           min={0}
+          max={100}
           step={1}
           defaultValue={currentVotes || ""}
           onChange={function (e) {
-            if (
-              Number(e.currentTarget.value) < 0 ||
-              (isChecked && (e.currentTarget.value === "" || Number(e.currentTarget.value) == 0))
-            ) {
-              setIsInvalid(true);
+            const rawValue = e.currentTarget.value;
+            const parsedValue = Number(rawValue);
+            const isEmpty = rawValue === "";
+            const isInteger = Number.isInteger(parsedValue);
+            const isInRange = parsedValue >= 0 && parsedValue <= 100;
+            const isValid = !isEmpty && isInteger && Number.isFinite(parsedValue) && isInRange;
+
+            if (!isValid) {
+              setIsInvalid(isChecked);
               setVotes(0);
               onChange(isChecked, 0);
-            } else {
-              setIsInvalid(false);
-              setVotes(Number(e.currentTarget.value));
-              onChange(isChecked, Number(e.currentTarget.value));
+              return;
             }
+
+            setIsInvalid(false);
+            setVotes(parsedValue);
+            onChange(isChecked, parsedValue);
           }}
         />
       )}
