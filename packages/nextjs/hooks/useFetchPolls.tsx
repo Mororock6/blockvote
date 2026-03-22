@@ -54,10 +54,10 @@ export const useFetchPolls = (currentPage = 1, limit = 10, reversed = true) => {
           status: getPollStatus(rawPoll),
         });
       }
-
-      setPolls(_polls);
+      //Sort
+      const sortedPolls = _polls.sort((a, b) => Number(b.startTime) - Number(a.startTime));
+      setPolls(sortedPolls);
     }, 1000);
-
     setLastTimer(interval);
 
     () => {
