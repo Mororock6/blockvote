@@ -36,7 +36,12 @@ export default function Example({
   };
 
   const handlePollTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setPollData({ ...pollData, pollType: parseInt(e.target.value) });
+    const pollType = parseInt(e.target.value);
+    setPollData(prev => ({
+      ...prev,
+      pollType,
+      mode: pollType === PollType.SINGLE_VOTE ? EMode.NON_QV : prev.mode,
+    }));
   };
 
   const handleOptionChange = (index: number, value: string) => {
@@ -206,6 +211,7 @@ export default function Example({
         className="select bg-secondary text-neutral w-full rounded-xl"
         value={pollData.mode}
         onChange={handleModeChange}
+        disabled={pollData.pollType === PollType.SINGLE_VOTE}
       >
         <option value={EMode.QV}>Quadratic Vote</option>
         <option value={EMode.NON_QV}>Non Quadratic Vote</option>
