@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { genRandomSalt } from "maci-crypto";
 import { Keypair, PCommand, PubKey } from "maci-domainobjs";
-import { useContractRead, useContractWrite } from "wagmi";
+import { useAccount, useContractRead, useContractWrite } from "wagmi";
 import PollAbi from "~~/abi/Poll";
 import VoteCard from "~~/components/card/VoteCard";
 import { useAuthContext } from "~~/contexts/AuthContext";
@@ -14,6 +14,7 @@ import { getDataFromPinata } from "~~/utils/pinata";
 import { notification } from "~~/utils/scaffold-eth";
 
 export default function PollDetail({ id }: { id: bigint }) {
+  const { address } = useAccount();
   const { data: poll, error, isLoading } = useFetchPoll(id);
   const [pollType, setPollType] = useState(PollType.NOT_SELECTED);
   const MAX_VOTE_CREDITS = 100;
@@ -30,9 +31,12 @@ export default function PollDetail({ id }: { id: bigint }) {
   const [status, setStatus] = useState<PollStatus>();
   const [voted, setVoted] = useState<boolean>(false);
   const [voting, setVoting] = useState<boolean>(false);
+  const [isEditing, setIsEditing] = useState<boolean>(false);
+  const [initialVotes, setInitialVotes] = useState<{ index: number; votes: number }[]>([]);
+  const [initialSelectedIndexes, setInitialSelectedIndexes] = useState<number[]>([]);
 
-  const getVoteStorageKey = (pollId: bigint, voterIndex: bigint) =>
-    `poll-vote:${pollId.toString()}:${voterIndex.toString()}`;
+  const getVoteStorageKey = (pollId: bigint, userAddress: string) =>
+    `poll-vote:${pollId.toString()}:${userAddress.toLowerCase()}`;
 
   const validateVotes = (voteList: { index: number; votes: number }[]) => {
     let totalVotes = 0;
@@ -56,11 +60,21 @@ export default function PollDetail({ id }: { id: bigint }) {
   };
 
   useEffect(() => {
-    if (!poll || stateIndex == null) {
+    // Reset state when user changes
+    setVotes([]);
+    setSelectedIndexes([]);
+    setVoted(false);
+    setIsEditing(false);
+    setInitialVotes([]);
+    setInitialSelectedIndexes([]);
+  }, [address, id]);
+
+  useEffect(() => {
+    if (!poll || !address) {
       return;
     }
 
-    const storageKey = getVoteStorageKey(poll.id, stateIndex);
+    const storageKey = getVoteStorageKey(poll.id, address);
     const stored = window.localStorage.getItem(storageKey);
     if (!stored) {
       return;
@@ -76,7 +90,7 @@ export default function PollDetail({ id }: { id: bigint }) {
     } catch {
       // ignore malformed storage
     }
-  }, [poll, stateIndex]);
+  }, [poll, address]);
 
   useEffect(() => {
     if (!poll || !poll.metadata) {
@@ -189,6 +203,21 @@ export default function PollDetail({ id }: { id: bigint }) {
 
     setVoting(true);
 
+    const areVotesEqual = (v1: { index: number; votes: number }[], v2: { index: number; votes: number }[]) => {
+      if (v1.length !== v2.length) return false;
+      const sorted1 = [...v1].sort((a, b) => a.index - b.index);
+      const sorted2 = [...v2].sort((a, b) => a.index - b.index);
+      return sorted1.every((v, i) => v.index === sorted2[i].index && v.votes === sorted2[i].votes);
+    };
+
+    if (isEditing && areVotesEqual(votes, initialVotes)) {
+      notification.info("No changes detected. Vote remains the same.");
+      setVoted(true);
+      setIsEditing(false);
+      setVoting(false);
+      return;
+    }
+
     const votesToMessage = votes.map((v, i) =>
       getMessageAndEncKeyPair(
         stateIndex,
@@ -226,11 +255,12 @@ export default function PollDetail({ id }: { id: bigint }) {
       }
 
       notification.success("Vote casted successfully");
-      if (poll && stateIndex != null) {
-        const storageKey = getVoteStorageKey(poll.id, stateIndex);
+      if (poll && address) {
+        const storageKey = getVoteStorageKey(poll.id, address);
         window.localStorage.setItem(storageKey, JSON.stringify({ votes }));
       }
       setVoted(true);
+      setIsEditing(false);
     } catch (err) {
       console.log("err", err);
       notification.error("Casting vote failed, please try again ");
@@ -266,6 +296,13 @@ export default function PollDetail({ id }: { id: bigint }) {
 
     return { message, encKeyPair };
   }
+
+  const cancelChanges = useCallback(() => {
+    setVotes(initialVotes);
+    setSelectedIndexes(initialSelectedIndexes);
+    setVoted(true);
+    setIsEditing(false);
+  }, [initialVotes, initialSelectedIndexes]);
 
   const voteUpdated = useCallback(
     (index: number, checked: boolean, voteCounts: number) => {
@@ -325,7 +362,12 @@ export default function PollDetail({ id }: { id: bigint }) {
             {status === PollStatus.OPEN && (
               <div className={`mt-2 shadow-2xl`}>
                 <button
-                  onClick={() => setVoted(false)}
+                  onClick={() => {
+                    setInitialVotes(votes);
+                    setInitialSelectedIndexes(selectedIndexes);
+                    setVoted(false);
+                    setIsEditing(true);
+                  }}
                   className="hover:border-black border-2 border-accent w-full text-lg text-center bg-accent py-3 rounded-xl font-bold mt-4"
                 >
                   Change Vote
@@ -352,7 +394,7 @@ export default function PollDetail({ id }: { id: bigint }) {
               </div>
             ))}
             {status === PollStatus.OPEN && (
-              <div className={`mt-2 shadow-2xl`}>
+              <div className={`mt-2 shadow-2xl flex flex-col gap-4`}>
                 <button
                   onClick={castVote}
                   disabled={voting}
@@ -360,6 +402,14 @@ export default function PollDetail({ id }: { id: bigint }) {
                 >
                   Vote Now
                 </button>
+                {isEditing && (
+                  <button
+                    onClick={cancelChanges}
+                    className="hover:border-black border-2 border-secondary w-full text-lg text-center bg-secondary py-3 rounded-xl font-bold"
+                  >
+                    Cancel Changes
+                  </button>
+                )}
               </div>
             )}
           </>
