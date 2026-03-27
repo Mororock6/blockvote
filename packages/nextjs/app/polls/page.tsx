@@ -31,11 +31,19 @@ export default function Polls() {
               {polls.map(poll => (
                 <HoverBorderCard key={poll.id} showArrow={true} click={() => router.push(`/polls/${poll.id}`)}>
                   <div className="flex">
-                    <div className="flex-1 flex flex-col">
+                    <div className="flex-1 flex flex-col gap-1">
                       <h1 className="text-lg font-bold">
                         {poll.name} ({poll.status})
                       </h1>
                       <h1 className="text-md text-sm">{poll.options.length} Candidates</h1>
+                      <div className="text-sm opacity-80">
+                        <span className="font-semibold">Start:</span>{" "}
+                        {new Date(Number(poll.startTime) * 1000).toLocaleString()}
+                      </div>
+                      <div className="text-sm opacity-80">
+                        <span className="font-semibold">End:</span>{" "}
+                        {new Date(Number(poll.endTime) * 1000).toLocaleString()}
+                      </div>
                     </div>
                   </div>
                 </HoverBorderCard>

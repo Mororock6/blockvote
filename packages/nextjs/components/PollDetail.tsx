@@ -326,14 +326,27 @@ export default function PollDetail({ id }: { id: bigint }) {
   return (
     <div className="container mx-auto pt-10">
       <div className="flex h-full flex-col md:w-2/3 lg:w-1/2 mx-auto">
-        <div className="flex flex-row items-center my-5">
-          <div className="text-2xl font-bold ">
-            Vote for {poll?.name}
-            {status === PollStatus.CLOSED && " (Closed)"}
+        <div className="my-5">
+          <div className="flex flex-row items-center gap-3">
+            <div className="text-2xl font-bold">
+              Vote for {poll?.name}
+              {status === PollStatus.CLOSED && " (Closed)"}
+            </div>
+            {!voted && pollType === PollType.WEIGHTED_MULTIPLE_VOTE && (
+              <div className="text-sm font-semibold text-neutral-content">Credits: {MAX_VOTE_CREDITS}</div>
+            )}
           </div>
-          {!voted && pollType === PollType.WEIGHTED_MULTIPLE_VOTE && (
-            <div className="ml-3 text-sm font-semibold text-neutral-content">Credits: {MAX_VOTE_CREDITS}</div>
-          )}
+
+          <div className="mt-3 flex flex-col gap-1 text-sm opacity-80">
+            <div>
+              <span className="font-semibold">Start:</span>{" "}
+              {poll ? new Date(Number(poll.startTime) * 1000).toLocaleString() : "-"}
+            </div>
+            <div>
+              <span className="font-semibold">End:</span>{" "}
+              {poll ? new Date(Number(poll.endTime) * 1000).toLocaleString() : "-"}
+            </div>
+          </div>
         </div>
 
         {voted ? (
