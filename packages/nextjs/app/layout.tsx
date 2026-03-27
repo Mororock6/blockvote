@@ -9,9 +9,9 @@ const baseUrl = process.env.VERCEL_URL
   : `http://localhost:${process.env.PORT || 3000}`;
 const imageUrl = `${baseUrl}/thumbnail.jpg`;
 
-const title = "MACI Starter Kit";
-const titleTemplate = "%s | Scaffold-ETH 2";
-const description = "Built with 🏗 Scaffold-ETH 2";
+const title = "BlockVote";
+const titleTemplate = "%s | BlockVote";
+const description = "Private decentralized voting application";
 
 export const metadata: Metadata = {
   metadataBase: new URL(baseUrl),
