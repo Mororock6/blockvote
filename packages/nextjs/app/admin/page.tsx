@@ -55,7 +55,23 @@ export default function AdminPage() {
             <tbody>
               {polls.map(poll => (
                 <tr key={poll.id} className="pt-10 text-center">
-                  <td>{poll.name}</td>
+                  <td>
+                    <div className="flex flex-col gap-2">
+                      <div>{poll.name}</div>
+                      <div className="flex flex-wrap gap-2 justify-center">
+                        {poll.candidateOptions?.slice(0, 3).map((candidate, index) => (
+                          <div key={index} className="flex items-center gap-2 bg-primary rounded-lg px-2 py-1">
+                            <img
+                              src={candidate.image || "/default-candidate.png"}
+                              alt={candidate.name}
+                              className="w-6 h-6 rounded-full object-cover border border-slate-400"
+                            />
+                            <span className="text-xs">{candidate.name}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </td>
                   <td>{new Date(Number(poll.startTime) * 1000).toLocaleString()}</td>
                   <td>{new Date(Number(poll.endTime) * 1000).toLocaleString()}</td>
                   <td>

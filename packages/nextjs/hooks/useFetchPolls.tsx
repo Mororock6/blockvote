@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useScaffoldContractRead } from "./scaffold-eth";
-import { Poll, PollStatus, RawPoll } from "~~/types/poll";
+import { Poll, PollStatus, RawPoll, getCandidateOptions } from "~~/types/poll";
 
 export function getPollStatus(poll: RawPoll) {
   const now = Math.round(new Date().getTime() / 1000);
@@ -52,15 +52,17 @@ export const useFetchPolls = (currentPage = 1, limit = 10, reversed = true) => {
         _polls.push({
           ...rawPoll,
           status: getPollStatus(rawPoll),
+          candidateOptions: getCandidateOptions(rawPoll.metadata, rawPoll.options),
         });
       }
-      //Sort
+
       const sortedPolls = _polls.sort((a, b) => Number(b.startTime) - Number(a.startTime));
       setPolls(sortedPolls);
     }, 1000);
+
     setLastTimer(interval);
 
-    () => {
+    return () => {
       clearInterval(interval);
     };
   }, [rawPolls]);

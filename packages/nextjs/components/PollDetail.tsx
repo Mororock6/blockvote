@@ -1,20 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { genRandomSalt } from "maci-crypto";
 import { Keypair, PCommand, PubKey } from "maci-domainobjs";
-import { useAccount, useContractRead, useContractWrite } from "wagmi";
+import { useContractRead, useContractWrite } from "wagmi";
 import PollAbi from "~~/abi/Poll";
 import VoteCard from "~~/components/card/VoteCard";
 import { useAuthContext } from "~~/contexts/AuthContext";
 import { useFetchPoll } from "~~/hooks/useFetchPoll";
 import { getPollStatus } from "~~/hooks/useFetchPolls";
-import { PollStatus, PollType } from "~~/types/poll";
+import { CandidateOption, DEFAULT_CANDIDATE_IMAGE, PollStatus, PollType, getCandidateOptions } from "~~/types/poll";
 import { getDataFromPinata } from "~~/utils/pinata";
 import { notification } from "~~/utils/scaffold-eth";
 
 export default function PollDetail({ id }: { id: bigint }) {
-  const { address } = useAccount();
   const { data: poll, error, isLoading } = useFetchPoll(id);
   const [pollType, setPollType] = useState(PollType.NOT_SELECTED);
   const MAX_VOTE_CREDITS = 100;
@@ -23,20 +22,18 @@ export default function PollDetail({ id }: { id: bigint }) {
 
   const [votes, setVotes] = useState<{ index: number; votes: number }[]>([]);
   const [selectedIndexes, setSelectedIndexes] = useState<number[]>([]);
-
   const [isVotesInvalid, setIsVotesInvalid] = useState<Record<number, boolean>>({});
-
   const isAnyInvalid = Object.values(isVotesInvalid).some(v => v);
-  const [result, setResult] = useState<{ candidate: string; votes: number }[] | null>(null);
+
+  const [result, setResult] = useState<{ candidate: CandidateOption; votes: number }[] | null>(null);
   const [status, setStatus] = useState<PollStatus>();
   const [voted, setVoted] = useState<boolean>(false);
   const [voting, setVoting] = useState<boolean>(false);
-  const [isEditing, setIsEditing] = useState<boolean>(false);
-  const [initialVotes, setInitialVotes] = useState<{ index: number; votes: number }[]>([]);
-  const [initialSelectedIndexes, setInitialSelectedIndexes] = useState<number[]>([]);
 
-  const getVoteStorageKey = (pollId: bigint, userAddress: string) =>
-    `poll-vote:${pollId.toString()}:${userAddress.toLowerCase()}`;
+  const candidateOptions = useMemo(() => (poll ? getCandidateOptions(poll.metadata, poll.options) : []), [poll]);
+
+  const getVoteStorageKey = (pollId: bigint, voterIndex: bigint, pollAddress?: string) =>
+    `poll-vote:${pollAddress?.toLowerCase() || "unknown"}:${pollId.toString()}:${voterIndex.toString()}`;
 
   const validateVotes = (voteList: { index: number; votes: number }[]) => {
     let totalVotes = 0;
@@ -60,37 +57,41 @@ export default function PollDetail({ id }: { id: bigint }) {
   };
 
   useEffect(() => {
-    // Reset state when user changes
-    setVotes([]);
-    setSelectedIndexes([]);
-    setVoted(false);
-    setIsEditing(false);
-    setInitialVotes([]);
-    setInitialSelectedIndexes([]);
-  }, [address, id]);
-
-  useEffect(() => {
-    if (!poll || !address) {
+    if (!poll || stateIndex == null) {
       return;
     }
 
-    const storageKey = getVoteStorageKey(poll.id, address);
+    const storageKey = getVoteStorageKey(poll.id, stateIndex, poll.pollContracts.poll);
     const stored = window.localStorage.getItem(storageKey);
+
     if (!stored) {
       return;
     }
 
     try {
-      const parsed = JSON.parse(stored) as { votes: { index: number; votes: number }[] };
-      if (Array.isArray(parsed?.votes) && parsed.votes.length > 0) {
+      const parsed = JSON.parse(stored) as {
+        votes: { index: number; votes: number }[];
+        pollName?: string;
+        optionNames?: string[];
+      };
+
+      const samePollName = parsed?.pollName === poll.name;
+      const sameOptions =
+        Array.isArray(parsed?.optionNames) &&
+        parsed.optionNames.length === poll.options.length &&
+        parsed.optionNames.every((name, index) => name === poll.options[index]);
+
+      if (Array.isArray(parsed?.votes) && parsed.votes.length > 0 && samePollName && sameOptions) {
         setVotes(parsed.votes);
         setSelectedIndexes(parsed.votes.map(v => v.index));
         setVoted(true);
+      } else {
+        window.localStorage.removeItem(storageKey);
       }
     } catch {
-      // ignore malformed storage
+      window.localStorage.removeItem(storageKey);
     }
-  }, [poll, address]);
+  }, [poll, stateIndex]);
 
   useEffect(() => {
     if (!poll || !poll.metadata) {
@@ -110,33 +111,41 @@ export default function PollDetail({ id }: { id: bigint }) {
           const {
             results: { tally },
           } = await getDataFromPinata(poll.tallyJsonCID);
+
           if (poll.options.length > tally.length) {
             throw new Error("Invalid tally data");
           }
+
           const tallyCounts: number[] = tally.map((v: string) => Number(v)).slice(0, poll.options.length);
-          const result = [];
+          const resultRows: { candidate: CandidateOption; votes: number }[] = [];
+
           for (let i = 0; i < poll.options.length; i++) {
-            const candidate = poll.options[i];
+            const candidate = candidateOptions[i] || {
+              name: poll.options[i],
+              image: "",
+              description: "",
+            };
+
             const votes = tallyCounts[i];
-            result.push({ candidate, votes });
+            resultRows.push({ candidate, votes });
           }
-          result.sort((a, b) => b.votes - a.votes);
-          setResult(result);
-          console.log("data", result);
+
+          resultRows.sort((a, b) => b.votes - a.votes);
+          setResult(resultRows);
         } catch (err) {
           console.log("err", err);
         }
       })();
     }
 
-    const statusUpdateInterval = setInterval(async () => {
+    const statusUpdateInterval = setInterval(() => {
       setStatus(getPollStatus(poll));
     }, 1000);
 
     return () => {
       clearInterval(statusUpdateInterval);
     };
-  }, [poll]);
+  }, [poll, candidateOptions]);
 
   const { data: coordinatorPubKeyResult } = useContractRead({
     abi: PollAbi,
@@ -177,13 +186,11 @@ export default function PollDetail({ id }: { id: bigint }) {
       return;
     }
 
-    // check if the votes are valid
     if (isAnyInvalid) {
       notification.error("Please enter a valid number of votes");
       return;
     }
 
-    // check if no votes are selected
     if (votes.length === 0) {
       notification.error("Please select at least one option to vote");
       return;
@@ -195,28 +202,12 @@ export default function PollDetail({ id }: { id: bigint }) {
       return;
     }
 
-    // check if the poll is closed
     if (status !== PollStatus.OPEN) {
       notification.error("Voting is closed for this poll");
       return;
     }
 
     setVoting(true);
-
-    const areVotesEqual = (v1: { index: number; votes: number }[], v2: { index: number; votes: number }[]) => {
-      if (v1.length !== v2.length) return false;
-      const sorted1 = [...v1].sort((a, b) => a.index - b.index);
-      const sorted2 = [...v2].sort((a, b) => a.index - b.index);
-      return sorted1.every((v, i) => v.index === sorted2[i].index && v.votes === sorted2[i].votes);
-    };
-
-    if (isEditing && areVotesEqual(votes, initialVotes)) {
-      notification.info("No changes detected. Vote remains the same.");
-      setVoted(true);
-      setIsEditing(false);
-      setVoting(false);
-      return;
-    }
 
     const votesToMessage = votes.map((v, i) =>
       getMessageAndEncKeyPair(
@@ -255,12 +246,18 @@ export default function PollDetail({ id }: { id: bigint }) {
       }
 
       notification.success("Vote casted successfully");
-      if (poll && address) {
-        const storageKey = getVoteStorageKey(poll.id, address);
-        window.localStorage.setItem(storageKey, JSON.stringify({ votes }));
-      }
+
+      const storageKey = getVoteStorageKey(poll.id, stateIndex, poll.pollContracts.poll);
+      window.localStorage.setItem(
+        storageKey,
+        JSON.stringify({
+          votes,
+          pollName: poll.name,
+          optionNames: [...poll.options],
+        }),
+      );
+
       setVoted(true);
-      setIsEditing(false);
     } catch (err) {
       console.log("err", err);
       notification.error("Casting vote failed, please try again ");
@@ -289,27 +286,17 @@ export default function PollDetail({ id }: { id: bigint }) {
     );
 
     const signature = command.sign(keypair.privKey);
-
     const encKeyPair = new Keypair();
-
     const message = command.encrypt(signature, Keypair.genEcdhSharedKey(encKeyPair.privKey, coordinatorPubKey));
 
     return { message, encKeyPair };
   }
-
-  const cancelChanges = useCallback(() => {
-    setVotes(initialVotes);
-    setSelectedIndexes(initialSelectedIndexes);
-    setVoted(true);
-    setIsEditing(false);
-  }, [initialVotes, initialSelectedIndexes]);
 
   const voteUpdated = useCallback(
     (index: number, checked: boolean, voteCounts: number) => {
       if (pollType === PollType.SINGLE_VOTE) {
         setSelectedIndexes(checked ? [index] : []);
         setVotes(checked ? [{ index, votes: voteCounts }] : []);
-
         return;
       }
 
@@ -334,7 +321,6 @@ export default function PollDetail({ id }: { id: bigint }) {
   );
 
   if (isLoading) return <div>Loading...</div>;
-
   if (error) return <div>Poll not found</div>;
 
   return (
@@ -349,25 +335,37 @@ export default function PollDetail({ id }: { id: bigint }) {
             <div className="ml-3 text-sm font-semibold text-neutral-content">Credits: {MAX_VOTE_CREDITS}</div>
           )}
         </div>
+
         {voted ? (
           <div>
             <p className="font-bold">Voted:</p>
             <ul>
-              {votes.map(vote => (
-                <li key={vote.index} className="bg-primary flex w-full px-2 py-2 rounded-lg mb-2">
-                  {poll?.options[vote.index]}: {vote.votes} votes
-                </li>
-              ))}
+              {votes.map(vote => {
+                const candidate = candidateOptions[vote.index];
+
+                return (
+                  <li key={vote.index} className="bg-primary flex w-full px-3 py-3 rounded-lg mb-2 items-center gap-3">
+                    <img
+                      src={candidate?.image || DEFAULT_CANDIDATE_IMAGE}
+                      alt={candidate?.name || poll?.options[vote.index]}
+                      className="w-12 h-12 rounded-full object-cover border border-slate-400 shrink-0"
+                    />
+                    <div className="flex-1">
+                      <div className="font-semibold">{candidate?.name || poll?.options[vote.index]}</div>
+                      {candidate?.description ? (
+                        <div className="text-sm opacity-80 mt-1 whitespace-pre-wrap">{candidate.description}</div>
+                      ) : null}
+                    </div>
+                    <div className="font-semibold">{vote.votes} votes</div>
+                  </li>
+                );
+              })}
             </ul>
+
             {status === PollStatus.OPEN && (
-              <div className={`mt-2 shadow-2xl`}>
+              <div className="mt-2 shadow-2xl">
                 <button
-                  onClick={() => {
-                    setInitialVotes(votes);
-                    setInitialSelectedIndexes(selectedIndexes);
-                    setVoted(false);
-                    setIsEditing(true);
-                  }}
+                  onClick={() => setVoted(false)}
                   className="hover:border-black border-2 border-accent w-full text-lg text-center bg-accent py-3 rounded-xl font-bold mt-4"
                 >
                   Change Vote
@@ -377,7 +375,7 @@ export default function PollDetail({ id }: { id: bigint }) {
           </div>
         ) : (
           <>
-            {poll?.options.map((candidate, index) => (
+            {candidateOptions.map((candidate, index) => (
               <div className="pb-5 flex" key={index}>
                 <VoteCard
                   pollOpen={status === PollStatus.OPEN}
@@ -388,13 +386,19 @@ export default function PollDetail({ id }: { id: bigint }) {
                   pollType={pollType}
                   onChange={(checked, votes) => voteUpdated(index, checked, votes)}
                   isInvalid={Boolean(isVotesInvalid[index])}
-                  setIsInvalid={status => setIsVotesInvalid({ ...isVotesInvalid, [index]: status })}
+                  setIsInvalid={status =>
+                    setIsVotesInvalid(prev => ({
+                      ...prev,
+                      [index]: status,
+                    }))
+                  }
                   isVoting={voting}
                 />
               </div>
             ))}
+
             {status === PollStatus.OPEN && (
-              <div className={`mt-2 shadow-2xl flex flex-col gap-4`}>
+              <div className="mt-2 shadow-2xl">
                 <button
                   onClick={castVote}
                   disabled={voting}
@@ -402,14 +406,6 @@ export default function PollDetail({ id }: { id: bigint }) {
                 >
                   Vote Now
                 </button>
-                {isEditing && (
-                  <button
-                    onClick={cancelChanges}
-                    className="hover:border-black border-2 border-secondary w-full text-lg text-center bg-secondary py-3 rounded-xl font-bold"
-                  >
-                    Cancel Changes
-                  </button>
-                )}
               </div>
             )}
           </>
@@ -431,7 +427,21 @@ export default function PollDetail({ id }: { id: bigint }) {
                   {result.map((r, i) => (
                     <tr key={i} className="text-center">
                       <td>{i + 1}</td>
-                      <td>{r.candidate}</td>
+                      <td>
+                        <div className="flex items-center gap-3 justify-center">
+                          <img
+                            src={r.candidate.image || DEFAULT_CANDIDATE_IMAGE}
+                            alt={r.candidate.name}
+                            className="w-10 h-10 rounded-full object-cover border border-slate-400"
+                          />
+                          <div className="text-left">
+                            <div>{r.candidate.name}</div>
+                            {r.candidate.description ? (
+                              <div className="text-xs opacity-70">{r.candidate.description}</div>
+                            ) : null}
+                          </div>
+                        </div>
+                      </td>
                       <td>{r.votes}</td>
                     </tr>
                   ))}

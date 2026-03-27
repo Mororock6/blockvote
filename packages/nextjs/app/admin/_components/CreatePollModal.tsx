@@ -5,8 +5,7 @@ import { MdEdit } from "react-icons/md";
 import { RxCross2 } from "react-icons/rx";
 import Modal from "~~/components/Modal";
 import { useScaffoldContractWrite } from "~~/hooks/scaffold-eth";
-import { PollType } from "~~/types/poll";
-import { EMode } from "~~/types/poll";
+import { CandidateOption, EMode, PollType } from "~~/types/poll";
 import { notification } from "~~/utils/scaffold-eth";
 
 export default function Example({
@@ -27,12 +26,16 @@ export default function Example({
     expiry: defaultExpiry,
     pollType: PollType.NOT_SELECTED,
     mode: EMode.QV,
-    options: [""],
+    options: [{ name: "", image: "", description: "" }] as CandidateOption[],
   });
+
   const [isEditingTitle, setIsEditingTitle] = useState<boolean>(false);
 
   const handleAddOption = () => {
-    setPollData({ ...pollData, options: [...pollData.options, ""] });
+    setPollData(prev => ({
+      ...prev,
+      options: [...prev.options, { name: "", image: "", description: "" }],
+    }));
   };
 
   const handlePollTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -44,18 +47,22 @@ export default function Example({
     }));
   };
 
-  const handleOptionChange = (index: number, value: string) => {
-    const newOptions = [...pollData.options];
-    newOptions[index] = value;
-    setPollData({ ...pollData, options: newOptions });
+  const handleOptionChange = (index: number, field: keyof CandidateOption, value: string) => {
+    setPollData(prev => ({
+      ...prev,
+      options: prev.options.map((option, i) => (i === index ? { ...option, [field]: value } : option)),
+    }));
   };
 
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setPollData({ ...pollData, title: e.target.value });
+    setPollData(prev => ({ ...prev, title: e.target.value }));
   };
 
   const handleModeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setPollData({ ...pollData, mode: e.target.value === "0" ? EMode.QV : EMode.NON_QV });
+    setPollData(prev => ({
+      ...prev,
+      mode: e.target.value === "0" ? EMode.QV : EMode.NON_QV,
+    }));
   };
 
   const handleEditTitleClick = () => {
@@ -67,43 +74,45 @@ export default function Example({
   };
 
   function removeOptions(index: number): void {
-    const newOptions = [...pollData.options];
-    newOptions.splice(index, 1);
-    setPollData({ ...pollData, options: newOptions });
+    setPollData(prev => ({
+      ...prev,
+      options: prev.options.filter((_, i) => i !== index),
+    }));
   }
 
   const startTimestamp = Math.round(pollData.startDate.getTime() / 1000);
   const duration = Math.round((pollData.expiry.getTime() - pollData.startDate.getTime()) / 1000);
 
+  const optionNames = pollData.options.map(option => option.name.trim());
+  const metadata = JSON.stringify({
+    version: 1,
+    pollType: pollData.pollType,
+    options: pollData.options.map(option => ({
+      name: option.name.trim(),
+      image: option.image?.trim() || "",
+      description: option.description?.trim() || "",
+    })),
+  });
+
   const { writeAsync } = useScaffoldContractWrite({
     contractName: "MACIWrapper",
     functionName: "createPoll",
-    args: [
-      pollData.title,
-      pollData.options || [],
-      JSON.stringify({ pollType: pollData.pollType }),
-      BigInt(startTimestamp),
-      BigInt(duration),
-      pollData.mode,
-    ] as any,
+    args: [pollData.title, optionNames, metadata, BigInt(startTimestamp), BigInt(duration), pollData.mode] as any,
   });
 
   async function onSubmit() {
-    // validate the inputs
     for (const option of pollData.options) {
-      if (!option) {
-        notification.error("Option cannot be blank", { showCloseButton: false });
+      if (!option.name.trim()) {
+        notification.error("Candidate name cannot be blank", { showCloseButton: false });
         return;
       }
     }
 
-    // START DATE validation
     if (pollData.startDate.getTime() < Date.now() - 5000) {
       notification.error("Start date must be now or in the future", { showCloseButton: false });
       return;
     }
 
-    // EXPIRY validation
     if (pollData.expiry.getTime() <= pollData.startDate.getTime()) {
       notification.error("Expiry date must be after the start date", { showCloseButton: false });
       return;
@@ -172,14 +181,12 @@ export default function Example({
         </label>
       </div>
 
-      {/* Datetime selector here */}
-      {/* Datetime selectors here */}
       <div className="mb-2 text-neutral-content">Select the start date</div>
       <input
         type="datetime-local"
         className="border bg-secondary text-neutral rounded-xl px-4 py-2 w-full focus:outline-none"
         value={pollData.startDate.toLocaleString("sv").replace(" ", "T").slice(0, -3)}
-        onChange={e => setPollData({ ...pollData, startDate: new Date(e.target.value) })}
+        onChange={e => setPollData(prev => ({ ...prev, startDate: new Date(e.target.value) }))}
       />
 
       <div className="mt-3 mb-2 text-neutral-content">Select the expiry date</div>
@@ -187,10 +194,9 @@ export default function Example({
         type="datetime-local"
         className="border bg-secondary text-neutral rounded-xl px-4 py-2 w-full focus:outline-none"
         value={pollData.expiry.toLocaleString("sv").replace(" ", "T").slice(0, -3)}
-        onChange={e => setPollData({ ...pollData, expiry: new Date(e.target.value) })}
+        onChange={e => setPollData(prev => ({ ...prev, expiry: new Date(e.target.value) }))}
       />
 
-      {/* Poll Type Selector Here */}
       <div className="mt-3 mb-2 text-neutral-content">Select the poll type</div>
       <select
         className="select bg-secondary text-neutral w-full rounded-xl"
@@ -205,7 +211,6 @@ export default function Example({
         <option value={PollType.WEIGHTED_MULTIPLE_VOTE}>Weighted-Multiple Candidate Select</option>
       </select>
 
-      {/* Quadratic Vote or Non Quadratic Vote Selector Here */}
       <div className="mt-3 mb-2 text-neutral-content">Quadratic Vote or Non Quadratic Vote</div>
       <select
         className="select bg-secondary text-neutral w-full rounded-xl"
@@ -222,22 +227,43 @@ export default function Example({
       <div className="mb-3 text-neutral-content">Create the options</div>
 
       {pollData.options.map((option, index) => (
-        <div key={index} className="mb-2 flex flex-row">
-          <input
-            type="text"
-            className="border border-[#3647A4] bg-secondary text-neutral rounded-md px-4 py-2 w-full focus:outline-none "
-            placeholder={`Candidate ${index + 1}`}
-            value={option}
-            onChange={e => handleOptionChange(index, e.target.value)}
-          />
-          {pollData.options.length > 1 && (
-            <button
-              className="btn btn-outline ml-4 text-primary hover:bg-primary hover:text-primary-content bg-primary-content"
-              onClick={() => removeOptions(index)}
-            >
-              <RxCross2 size={20} />
-            </button>
-          )}
+        <div key={index} className="mb-4 rounded-xl border border-[#3647A4] p-4">
+          <div className="flex justify-between items-start gap-4">
+            <div className="flex-1 flex flex-col gap-3">
+              <input
+                type="text"
+                className="border border-[#3647A4] bg-white text-black rounded-md px-4 py-2 w-full focus:outline-none"
+                placeholder={`Candidate ${index + 1} Name`}
+                value={option.name}
+                onChange={e => handleOptionChange(index, "name", e.target.value)}
+              />
+
+              <input
+                type="text"
+                className="border border-[#3647A4] bg-white text-black rounded-md px-4 py-2 w-full focus:outline-none"
+                placeholder="Image URL (optional)"
+                value={option.image || ""}
+                onChange={e => handleOptionChange(index, "image", e.target.value)}
+              />
+
+              <textarea
+                className="border border-[#3647A4] bg-white text-black rounded-md px-4 py-2 w-full focus:outline-none min-h-[80px]"
+                placeholder="Description (optional)"
+                value={option.description || ""}
+                onChange={e => handleOptionChange(index, "description", e.target.value)}
+              />
+            </div>
+
+            {pollData.options.length > 1 && (
+              <button
+                type="button"
+                className="btn btn-outline text-primary hover:bg-primary hover:text-primary-content bg-primary-content"
+                onClick={() => removeOptions(index)}
+              >
+                <RxCross2 size={20} />
+              </button>
+            )}
+          </div>
         </div>
       ))}
 

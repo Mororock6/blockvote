@@ -1,9 +1,9 @@
 import { memo, useRef, useState } from "react";
-import { PollType } from "~~/types/poll";
+import { CandidateOption, DEFAULT_CANDIDATE_IMAGE, PollType } from "~~/types/poll";
 
 type VoteCardProps = {
   index: number;
-  candidate: string;
+  candidate: CandidateOption;
   isChecked: boolean;
   isVoting: boolean;
   pollType: PollType;
@@ -31,11 +31,11 @@ const VoteCard = ({
 
   return (
     <>
-      <div className="bg-primary flex w-full px-2 py-2 rounded-lg">
+      <div className="bg-primary flex w-full px-3 py-3 rounded-lg items-start gap-3">
         {pollOpen && (
           <input
             type={pollType === PollType.SINGLE_VOTE ? "radio" : "checkbox"}
-            className="mr-2"
+            className="mt-2 mr-1"
             value={index}
             checked={isChecked}
             disabled={!pollOpen || isVoting}
@@ -70,7 +70,18 @@ const VoteCard = ({
           />
         )}
 
-        <div className={!pollOpen ? "ml-2" : ""}>{candidate}</div>
+        <img
+          src={candidate.image || DEFAULT_CANDIDATE_IMAGE}
+          alt={candidate.name}
+          className="w-14 h-14 rounded-full object-cover border border-slate-400 shrink-0"
+        />
+
+        <div className={`flex-1 ${!pollOpen ? "ml-2" : ""}`}>
+          <div className="font-semibold">{candidate.name}</div>
+          {candidate.description ? (
+            <div className="text-sm opacity-80 mt-1 whitespace-pre-wrap">{candidate.description}</div>
+          ) : null}
+        </div>
       </div>
 
       {pollOpen && pollType === PollType.WEIGHTED_MULTIPLE_VOTE && (
@@ -115,7 +126,9 @@ const VoteCard = ({
 export default memo(VoteCard, (prev, next) => {
   return (
     prev.index === next.index &&
-    prev.candidate === next.candidate &&
+    prev.candidate.name === next.candidate.name &&
+    prev.candidate.image === next.candidate.image &&
+    prev.candidate.description === next.candidate.description &&
     prev.isChecked === next.isChecked &&
     prev.isInvalid === next.isInvalid &&
     prev.pollOpen === next.pollOpen &&
