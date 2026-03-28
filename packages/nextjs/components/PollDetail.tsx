@@ -23,12 +23,16 @@ export default function PollDetail({ id }: { id: bigint }) {
   const [votes, setVotes] = useState<{ index: number; votes: number }[]>([]);
   const [selectedIndexes, setSelectedIndexes] = useState<number[]>([]);
   const [isVotesInvalid, setIsVotesInvalid] = useState<Record<number, boolean>>({});
-  const isAnyInvalid = Object.values(isVotesInvalid).some(v => v);
-
   const [result, setResult] = useState<{ candidate: CandidateOption; votes: number }[] | null>(null);
   const [status, setStatus] = useState<PollStatus>();
   const [voted, setVoted] = useState<boolean>(false);
   const [voting, setVoting] = useState<boolean>(false);
+
+  const [isEditing, setIsEditing] = useState<boolean>(false);
+  const [initialVotes, setInitialVotes] = useState<{ index: number; votes: number }[]>([]);
+  const [initialSelectedIndexes, setInitialSelectedIndexes] = useState<number[]>([]);
+
+  const isAnyInvalid = Object.values(isVotesInvalid).some(v => v);
 
   const candidateOptions = useMemo(() => (poll ? getCandidateOptions(poll.metadata, poll.options) : []), [poll]);
 
@@ -55,6 +59,26 @@ export default function PollDetail({ id }: { id: bigint }) {
 
     return { valid: true, reason: "" };
   };
+
+  function normalizeVotes(voteList: { index: number; votes: number }[]) {
+    return [...voteList]
+      .filter(v => v.votes > 0)
+      .sort((a, b) => a.index - b.index)
+      .map(v => `${v.index}:${v.votes}`)
+      .join("|");
+  }
+
+  function isSameVote(current: { index: number; votes: number }[], previous: { index: number; votes: number }[]) {
+    return normalizeVotes(current) === normalizeVotes(previous);
+  }
+
+  const cancelChanges = useCallback(() => {
+    setVotes(initialVotes);
+    setSelectedIndexes(initialSelectedIndexes);
+    setIsVotesInvalid({});
+    setVoted(true);
+    setIsEditing(false);
+  }, [initialVotes, initialSelectedIndexes]);
 
   useEffect(() => {
     if (!poll || stateIndex == null) {
@@ -84,6 +108,8 @@ export default function PollDetail({ id }: { id: bigint }) {
       if (Array.isArray(parsed?.votes) && parsed.votes.length > 0 && samePollName && sameOptions) {
         setVotes(parsed.votes);
         setSelectedIndexes(parsed.votes.map(v => v.index));
+        setInitialVotes(parsed.votes);
+        setInitialSelectedIndexes(parsed.votes.map(v => v.index));
         setVoted(true);
       } else {
         window.localStorage.removeItem(storageKey);
@@ -126,8 +152,10 @@ export default function PollDetail({ id }: { id: bigint }) {
               description: "",
             };
 
-            const votes = tallyCounts[i];
-            resultRows.push({ candidate, votes });
+            resultRows.push({
+              candidate,
+              votes: tallyCounts[i],
+            });
           }
 
           resultRows.sort((a, b) => b.votes - a.votes);
@@ -196,6 +224,13 @@ export default function PollDetail({ id }: { id: bigint }) {
       return;
     }
 
+    if (initialVotes.length > 0 && isSameVote(votes, initialVotes)) {
+      notification.info("Already voted for this candidate");
+      setVoted(true);
+      setIsEditing(false);
+      return;
+    }
+
     const validation = validateVotes(votes);
     if (!validation.valid) {
       notification.error(validation.reason);
@@ -257,7 +292,10 @@ export default function PollDetail({ id }: { id: bigint }) {
         }),
       );
 
+      setInitialVotes(votes);
+      setInitialSelectedIndexes(votes.map(v => v.index));
       setVoted(true);
+      setIsEditing(false);
     } catch (err) {
       console.log("err", err);
       notification.error("Casting vote failed, please try again ");
@@ -267,17 +305,17 @@ export default function PollDetail({ id }: { id: bigint }) {
   };
 
   function getMessageAndEncKeyPair(
-    stateIndex: bigint,
+    currentStateIndex: bigint,
     pollIndex: bigint,
     candidateIndex: bigint,
     weight: bigint,
     nonce: bigint,
-    coordinatorPubKey: PubKey,
-    keypair: Keypair,
+    currentCoordinatorPubKey: PubKey,
+    currentKeypair: Keypair,
   ) {
     const command: PCommand = new PCommand(
-      stateIndex,
-      keypair.pubKey,
+      currentStateIndex,
+      currentKeypair.pubKey,
       candidateIndex,
       weight,
       nonce,
@@ -285,9 +323,9 @@ export default function PollDetail({ id }: { id: bigint }) {
       genRandomSalt(),
     );
 
-    const signature = command.sign(keypair.privKey);
+    const signature = command.sign(currentKeypair.privKey);
     const encKeyPair = new Keypair();
-    const message = command.encrypt(signature, Keypair.genEcdhSharedKey(encKeyPair.privKey, coordinatorPubKey));
+    const message = command.encrypt(signature, Keypair.genEcdhSharedKey(encKeyPair.privKey, currentCoordinatorPubKey));
 
     return { message, encKeyPair };
   }
@@ -331,8 +369,10 @@ export default function PollDetail({ id }: { id: bigint }) {
             <div className="text-2xl font-bold">
               Vote for {poll?.name}
               {status === PollStatus.CLOSED && " (Closed)"}
+              {status === PollStatus.NOT_STARTED && " (Not Started)"}
             </div>
-            {!voted && pollType === PollType.WEIGHTED_MULTIPLE_VOTE && (
+
+            {!voted && pollType === PollType.WEIGHTED_MULTIPLE_VOTE && status === PollStatus.OPEN && (
               <div className="text-sm font-semibold text-neutral-content">Credits: {MAX_VOTE_CREDITS}</div>
             )}
           </div>
@@ -347,6 +387,12 @@ export default function PollDetail({ id }: { id: bigint }) {
               {poll ? new Date(Number(poll.endTime) * 1000).toLocaleString() : "-"}
             </div>
           </div>
+
+          {status === PollStatus.NOT_STARTED && (
+            <div className="mt-4 rounded-xl border border-warning bg-warning/10 px-4 py-3 text-sm font-medium">
+              Voting hasn&apos;t started yet. Please come back when the poll opens.
+            </div>
+          )}
         </div>
 
         {voted ? (
@@ -378,7 +424,12 @@ export default function PollDetail({ id }: { id: bigint }) {
             {status === PollStatus.OPEN && (
               <div className="mt-2 shadow-2xl">
                 <button
-                  onClick={() => setVoted(false)}
+                  onClick={() => {
+                    setInitialVotes(votes);
+                    setInitialSelectedIndexes(selectedIndexes);
+                    setVoted(false);
+                    setIsEditing(true);
+                  }}
                   className="hover:border-black border-2 border-accent w-full text-lg text-center bg-accent py-3 rounded-xl font-bold mt-4"
                 >
                   Change Vote
@@ -397,12 +448,12 @@ export default function PollDetail({ id }: { id: bigint }) {
                   isChecked={selectedIndexes.includes(index)}
                   currentVotes={votes.find(v => v.index === index)?.votes}
                   pollType={pollType}
-                  onChange={(checked, votes) => voteUpdated(index, checked, votes)}
+                  onChange={(checked, updatedVotes) => voteUpdated(index, checked, updatedVotes)}
                   isInvalid={Boolean(isVotesInvalid[index])}
-                  setIsInvalid={status =>
+                  setIsInvalid={currentStatus =>
                     setIsVotesInvalid(prev => ({
                       ...prev,
-                      [index]: status,
+                      [index]: currentStatus,
                     }))
                   }
                   isVoting={voting}
@@ -411,7 +462,7 @@ export default function PollDetail({ id }: { id: bigint }) {
             ))}
 
             {status === PollStatus.OPEN && (
-              <div className="mt-2 shadow-2xl">
+              <div className="mt-2 shadow-2xl flex flex-col gap-4">
                 <button
                   onClick={castVote}
                   disabled={voting}
@@ -419,6 +470,15 @@ export default function PollDetail({ id }: { id: bigint }) {
                 >
                   Vote Now
                 </button>
+
+                {isEditing && (
+                  <button
+                    onClick={cancelChanges}
+                    className="hover:border-black border-2 border-secondary w-full text-lg text-center bg-secondary py-3 rounded-xl font-bold"
+                  >
+                    Cancel Changes
+                  </button>
+                )}
               </div>
             )}
           </>
