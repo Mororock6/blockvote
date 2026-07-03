@@ -232,7 +232,27 @@ yarn format           # Both packages
 # Run a single test by name
 yarn hardhat:test --grep "test description"
 ```
+# 📸 Screenshots
 
+| Home | Polls |
+|------|------|
+| ![](screenshots/home.png) | ![](screenshots/polls.png) |
+
+| Vote |
+|------|
+| ![](screenshots/single_candidate_vote.png) |
+
+| Admin Dashboard | Create Poll |
+|------|------|
+| ![](screenshots/admin-dashboard.png) | ![](screenshots/create-poll.png) |
+
+| Generate Results | Final Results |
+|------|------|
+| ![](screenshots/generate-proof.png) | ![](screenshots/results.png) |
+
+| IPFS Panel |
+|------|
+| ![](screenshots/ipfs-results.png) |
 ---
 
 ## 📁 Project Structure
